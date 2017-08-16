@@ -34,7 +34,6 @@ public class ActiveMQReceiver {
     public static final int RECEIVE_ERROR = 14;
     public static final int ERROR = 15;
 
-
     public ActiveMQReceiver(String url, String user, String password, String queue, String topic) {
         this.url = url;
         this.user = user;
@@ -47,38 +46,6 @@ public class ActiveMQReceiver {
 
     public static int TYPE_QUEUE = 1;
     public static int TYPE_TOPIC = 2;
-
-//    public void connect() {
-//        if (TextUtils.isEmpty(url)) {
-//            if (onActiveMQListener != null) {
-//                onActiveMQListener.onActiveMQChange(CONNECT_ERROR, new Exception("server url is null !"));
-//            }
-//            return;
-//        }
-//        new Thread() {
-//            @Override
-//            public void run() {
-//                super.run();
-//                ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory(
-//                        user, password, url);
-//                try {
-//                    connection = connectionFactory.createConnection();
-//                    connection.start();
-//                    if (onActiveMQListener != null)
-//                        onActiveMQListener.onActiveMQChange(CONNECT_OK, null);
-//                    Log.i(TAG, "connect: success");
-//                    isConnect = true;
-//                } catch (JMSException jms) {
-//                    isConnect = false;
-//                    if (onActiveMQListener != null)
-//                        onActiveMQListener.onActiveMQChange(CONNECT_ERROR, jms);
-//                    Log.i(TAG, "connect: error");
-//
-//                }
-//            }
-//        }.start();
-//    }
-
 
     public void receiveTopic() {
         receive(TYPE_TOPIC, this.topic);

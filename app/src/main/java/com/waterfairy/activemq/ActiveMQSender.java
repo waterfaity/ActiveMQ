@@ -76,7 +76,6 @@ public class ActiveMQSender {
 
     }
 
-
     public void sendTopic(String message) {
         send(TYPE_TOPIC, this.topic, message);
     }
