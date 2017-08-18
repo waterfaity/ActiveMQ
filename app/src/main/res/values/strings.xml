@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">ActiveMQ推送</string>
+    <string name="json_push">{\"action\":\"attach\",\"id\":\"9986\"}</string>
 </resources>

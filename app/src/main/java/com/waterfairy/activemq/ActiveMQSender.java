@@ -22,8 +22,6 @@ public class ActiveMQSender {
     private String url;
     private String user;
     private String password;
-    private String queue;
-    private String topic;
 
     public static final int CONNECT_OK = 1;
     public static final int CONNECT_ERROR = 2;
@@ -32,12 +30,10 @@ public class ActiveMQSender {
     public static final int ERROR = 5;
     private boolean isConnect;
 
-    public ActiveMQSender(String url, String user, String password, String queue, String topic) {
+    public ActiveMQSender(String url, String user, String password) {
         this.url = url;
         this.user = user;
         this.password = password;
-        this.queue = queue;
-        this.topic = topic;
     }
 
     private Connection connection;
@@ -56,32 +52,34 @@ public class ActiveMQSender {
         new Thread() {
             @Override
             public void run() {
-                ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory(
-                        user, password, url);
-                try {
-                    connection = connectionFactory.createConnection();
-                    connection.start();
-                    isConnect = true;
-                    if (onActiveMQListener != null)
-                        onActiveMQListener.onActiveMQSenderChange(CONNECT_OK, null);
-                    Log.i(TAG, "connect: success");
-                } catch (JMSException jms) {
-                    isConnect = false;
-                    if (onActiveMQListener != null)
-                        onActiveMQListener.onActiveMQSenderChange(CONNECT_ERROR, jms);
-                    Log.i(TAG, "connect: error");
+                if (!isConnect) {
+                    ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory(
+                            user, password, url);
+                    try {
+                        connection = connectionFactory.createConnection();
+                        connection.start();
+                        isConnect = true;
+                        if (onActiveMQListener != null)
+                            onActiveMQListener.onActiveMQSenderChange(CONNECT_OK, null);
+                        Log.i(TAG, "sender connect success");
+                    } catch (JMSException jms) {
+                        isConnect = false;
+                        if (onActiveMQListener != null)
+                            onActiveMQListener.onActiveMQSenderChange(CONNECT_ERROR, jms);
+                        Log.i(TAG, "sender connect error");
+                    }
                 }
             }
         }.start();
 
     }
 
-    public void sendTopic(String message) {
-        send(TYPE_TOPIC, this.topic, message);
+    public void sendTopic(String topic, String message) {
+        send(TYPE_TOPIC, topic, message);
     }
 
-    public void sendQueue(String message) {
-        send(TYPE_QUEUE, this.queue, message);
+    public void sendQueue(String queue, String message) {
+        send(TYPE_QUEUE, queue, message);
     }
 
     public void send(int type, String typeContent, String message) {
@@ -135,6 +133,16 @@ public class ActiveMQSender {
 
     public void setOnActiveMQListener(OnActiveMQListener onActiveMQListener) {
         this.onActiveMQListener = onActiveMQListener;
+    }
+
+    public void disconnect() {
+        try {
+            if (connection != null)
+                connection.close();
+        } catch (JMSException e) {
+            e.printStackTrace();
+        }
+        isConnect = false;
     }
 
     public interface OnActiveMQListener {

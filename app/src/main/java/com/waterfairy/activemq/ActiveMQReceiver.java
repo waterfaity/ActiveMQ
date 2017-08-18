@@ -5,6 +5,8 @@ import android.util.Log;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
 
+import java.util.HashMap;
+
 import javax.jms.Connection;
 import javax.jms.Destination;
 import javax.jms.JMSException;
@@ -25,21 +27,27 @@ public class ActiveMQReceiver {
     private String password;
     private String queue;
     private String topic;
+    private Session session;
+    private HashMap<String, Boolean> connectTag;
+    private HashMap<String, MessageConsumer> consumerHashMap;
 
-    private boolean isConnect;
-
-    public static final int CONNECT_OK = 11;
-    public static final int CONNECT_ERROR = 12;
+    private boolean isSocketConnect;
+    public static final int SOCKET_CONNECT_OK = 11;
+    public static final int SOCKET_CONNECT_ERROR = 12;
     public static final int RECEIVE_OK = 13;
     public static final int RECEIVE_ERROR = 14;
     public static final int ERROR = 15;
+    public static final int RECEIVER_CONNECT_OK = 18;
+    public static final int RECEIVER_CONNECT_ERROR = 19;
 
-    public ActiveMQReceiver(String url, String user, String password, String queue, String topic) {
+    private Connection connection;
+
+    public ActiveMQReceiver(String url, String user, String password) {
         this.url = url;
         this.user = user;
         this.password = password;
-        this.queue = queue;
-        this.topic = topic;
+        connectTag = new HashMap<>();
+        consumerHashMap = new HashMap<>();
     }
 
     private OnActiveMQListener onActiveMQListener;
@@ -47,94 +55,154 @@ public class ActiveMQReceiver {
     public static int TYPE_QUEUE = 1;
     public static int TYPE_TOPIC = 2;
 
-    public void receiveTopic() {
-        receive(TYPE_TOPIC, this.topic);
+    public void receiveTopic(String topic) {
+        receive(TYPE_TOPIC, topic);
     }
 
-    public void receiveQueue() {
-        receive(TYPE_QUEUE, this.queue);
+    public void receiveQueue(String queue) {
+        receive(TYPE_QUEUE, queue);
     }
 
     public void receive(int type, String typeContent) {
-        if (TextUtils.isEmpty(url)) {
-            if (onActiveMQListener != null) {
-                onActiveMQListener.onActiveMQChange(CONNECT_ERROR, new Exception("server url is null !"));
-            }
-            return;
-        }
-        if (TextUtils.isEmpty(typeContent)) {
-            if (onActiveMQListener != null) {
-                onActiveMQListener.onActiveMQChange(RECEIVE_ERROR, new Exception("has no queue or topic !"));
-            }
-            return;
-        }
         new Thread() {
             @Override
             public void run() {
+                String tagContent = "";
                 try {
-                    ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory(
-                            user, password, url);
-                    Connection connection = connectionFactory.createConnection();
-                    Session session = connection.createSession(true, Session.SESSION_TRANSACTED);
-                    Destination destination = null;
-                    if (type == TYPE_QUEUE) {
-                        destination = session.createQueue(typeContent);
-                    } else {
-                        destination = session.createTopic(typeContent);
-                    }
-                    MessageConsumer consumer = session.createConsumer(destination);
-                    try {
-                        connection.start();
-                        isConnect = true;
-                        if (onActiveMQListener != null)
-                            onActiveMQListener.onActiveMQChange(CONNECT_OK, null);
-                        Log.i(TAG, "receiver connect success");
-                    } catch (JMSException jms) {
-                        isConnect = false;
-                        if (onActiveMQListener != null)
-                            onActiveMQListener.onActiveMQChange(CONNECT_ERROR, jms);
-                        Log.i(TAG, "receiver connect error");
-                        return;
-                    }
-                    Log.i(TAG, "receive: start success !");
-                    if (onActiveMQListener != null)
-                        onActiveMQListener.onActiveMQChange(RECEIVE_OK, null);
-                    while (true) {
-                        Message message = consumer.receive();
-                        if (message instanceof TextMessage) {
-                            TextMessage receiveMessage = (TextMessage) message;
-                            if (onActiveMQListener != null) {
-                                onActiveMQListener.onActiveMQReceive(message);
-                            }
-                            Log.i(TAG, "receive: success -> " + receiveMessage.getText());
+                    if (isSocketConnect) {
+                        if (session == null) {
+                            session = connection.createSession(true, Session.SESSION_TRANSACTED);
+                        }
+                        Destination destination = null;
+
+                        if (type == TYPE_QUEUE) {
+                            destination = session.createQueue(typeContent);
+                            tagContent = "queue-" + typeContent;
                         } else {
-                            session.commit();
-                            break;
+                            destination = session.createTopic(typeContent);
+                            tagContent = "topic-" + typeContent;
+                        }
+                        MessageConsumer consumer = session.createConsumer(destination);
+                        try {
+                            connection.start();
+                            connectTag.put(tagContent, true);
+                            consumerHashMap.put(tagContent, consumer);
+                            if (onActiveMQListener != null)
+                                onActiveMQListener.onActiveMQChange(RECEIVER_CONNECT_OK, tagContent, null);
+                            Log.i(TAG, "receiver connect success - - >" + tagContent);
+                        } catch (JMSException jms) {
+                            connectTag.put(tagContent, false);
+                            if (onActiveMQListener != null)
+                                onActiveMQListener.onActiveMQChange(RECEIVER_CONNECT_ERROR, tagContent, jms);
+                            Log.i(TAG, "receiver connect error   - - >" + tagContent);
+                            return;
+                        }
+                        if (onActiveMQListener != null)
+                            onActiveMQListener.onActiveMQChange(RECEIVE_OK, null, null);
+
+                        try {
+                            while (true) {
+                                Message message = consumer.receive();
+                                if (message instanceof TextMessage) {
+                                    TextMessage receiveMessage = (TextMessage) message;
+                                    if (onActiveMQListener != null) {
+                                        onActiveMQListener.onActiveMQReceive(message);
+                                    }
+                                    Log.i(TAG, "receive message: (" + tagContent + ") -> " + receiveMessage.getText());
+                                } else {
+                                    session.commit();
+                                    break;
+                                }
+                            }
+                        } catch (JMSException jms) {
+                            jms.printStackTrace();
+                            connectTag.put(tagContent, false);
                         }
                     }
-                    connection.close();
-                    isConnect = false;
                 } catch (JMSException jms) {
-                    isConnect = false;
-                    Log.i(TAG, "receive:  error !");
+                    connectTag.put(tagContent, false);
+                    Log.i(TAG, "receive error ! -->" + typeContent);
                     jms.printStackTrace();
                     if (onActiveMQListener != null)
-                        onActiveMQListener.onActiveMQChange(RECEIVE_ERROR, jms);
+                        onActiveMQListener.onActiveMQChange(RECEIVE_ERROR, null, jms);
                 }
             }
         }.start();
     }
 
     public boolean isConnect() {
-        return isConnect;
+        return isSocketConnect;
     }
 
     public void setOnActiveMQListener(OnActiveMQListener onActiveMQListener) {
         this.onActiveMQListener = onActiveMQListener;
     }
 
+    public void disconnect() {
+        try {
+            if (connection != null)
+                connection.close();
+        } catch (JMSException e) {
+            e.printStackTrace();
+        }
+        isSocketConnect = false;
+        Log.i(TAG, "receiver disconnect");
+    }
+
+    public void connect() {
+        if (TextUtils.isEmpty(url)) {
+            if (onActiveMQListener != null) {
+                onActiveMQListener.onActiveMQChange(SOCKET_CONNECT_ERROR, null, new Exception("server url is null !"));
+            }
+            return;
+        }
+        new Thread() {
+            @Override
+            public void run() {
+                super.run();
+                if (!isSocketConnect) {
+                    try {
+                        ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory(
+                                user, password, url);
+                        connection = connectionFactory.createConnection();
+                        isSocketConnect = true;
+                        if (onActiveMQListener != null)
+                            onActiveMQListener.onActiveMQChange(SOCKET_CONNECT_OK, null, null);
+                        Log.i(TAG, "receiver connect success ");
+                    } catch (JMSException jms) {
+                        isSocketConnect = false;
+                        if (onActiveMQListener != null)
+                            onActiveMQListener.onActiveMQChange(SOCKET_CONNECT_ERROR, null, jms);
+                        Log.i(TAG, "receiver connect error ");
+                    }
+                }
+            }
+        }.start();
+
+    }
+
+    public void unSubscribe(String unSubscribe) {
+        new Thread() {
+            @Override
+            public void run() {
+                super.run();
+                if (isSocketConnect) {
+                    MessageConsumer messageConsumer = consumerHashMap.get(unSubscribe);
+                    if (messageConsumer != null) {
+                        try {
+                            messageConsumer.close();
+                            session.commit();
+                        } catch (JMSException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
+        }.start();
+    }
+
     public interface OnActiveMQListener {
-        void onActiveMQChange(int code, Exception e);
+        void onActiveMQChange(int code, String msg, Exception e);
 
         void onActiveMQReceive(Message message);
     }

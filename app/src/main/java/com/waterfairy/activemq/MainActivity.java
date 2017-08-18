@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
+import android.widget.EditText;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -15,24 +16,50 @@ import javax.jms.Message;
 public class MainActivity extends AppCompatActivity {
     private ActiveMQReceiver activeMQReceiver;
     private ActiveMQSender activeMQSender;
+    String url = "tcp://192.168.1.216:61616";
+    String user = "";
+    String password = "";
+
+    private EditText mETReceiverType;
+    private EditText mETSendType;
+
+    private EditText mETSendMsg;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        String url = "tcp://192.168.1.216:61616";
 
-        String user = "";
-        String password = "";
-        String queue = "MyQueue";
 //        new Thread(new MessageReceiver(query, url, user, password), "Name-Receiver").start();
 //        new Thread(new MessageSender(query, url, user, password), "Name-Sender").start();
+        mETReceiverType = (EditText) findViewById(R.id.type1);
+        mETSendType = (EditText) findViewById(R.id.type2);
+        mETSendMsg = (EditText) findViewById(R.id.content);
+        connectSender();
+        connectReceiver();
 
-        activeMQReceiver = new ActiveMQReceiver(url, user, password, queue, "");
+    }
+
+    public void connectSender() {
+        activeMQSender = new ActiveMQSender(url, user, password);
+        activeMQSender.setOnActiveMQListener(new ActiveMQSender.OnActiveMQListener() {
+            @Override
+            public void onActiveMQSenderChange(int code, Exception e) {
+                switch (code) {
+                    case ActiveMQSender.CONNECT_OK:
+                        break;
+                }
+            }
+        });
+        activeMQSender.connect();
+    }
+
+    public void connectReceiver() {
+        activeMQReceiver = new ActiveMQReceiver(url, user, password);
         activeMQReceiver.setOnActiveMQListener(new ActiveMQReceiver.OnActiveMQListener() {
             @Override
-            public void onActiveMQChange(int code, Exception e) {
+            public void onActiveMQChange(int code, String msg, Exception e) {
 
             }
 
@@ -49,29 +76,38 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
-        activeMQReceiver.receiveQueue();
+        activeMQReceiver.connect();
+    }
 
-        activeMQSender = new ActiveMQSender(url, user, password, queue, "");
-        activeMQSender.setOnActiveMQListener(new ActiveMQSender.OnActiveMQListener() {
-            @Override
-            public void onActiveMQSenderChange(int code, Exception e) {
-                switch (code) {
-                    case ActiveMQSender.CONNECT_OK:
-                        activeMQSender.sendQueue("hahhfdafdsafda  " + new Date().getTime());
-                        break;
+    public void sendQueue(View view) {
+        String msg = mETSendMsg.getText().toString();
+        String type = mETSendType.getText().toString();
+        activeMQSender.sendQueue(type, msg);
+    }
 
-                }
-            }
-        });
-        activeMQSender.connect();
+    public void sendTopic(View view) {
+        String msg = mETSendMsg.getText().toString();
+        String type = mETSendType.getText().toString();
+        activeMQSender.sendTopic(type, msg);
+    }
+
+    public void receiveQueue(View view) {
+        String type = mETReceiverType.getText().toString();
+        activeMQReceiver.receiveQueue(type);
     }
 
 
-    public void receive(View view) {
-
+    public void receiveTopic(View view) {
+        String type = mETReceiverType.getText().toString();
+        activeMQReceiver.receiveTopic(type);
     }
 
-    public void send(View view) {
-        activeMQSender.sendQueue("hhah" + new Date().getTime());
+    public void unReceiveTopic(View view) {
+        String type = mETReceiverType.getText().toString();
+        activeMQReceiver.unSubscribe("topic-" + type);
+    }
+
+    public void unReceiveQueue(View view) {
+        String type = mETReceiverType.getText().toString();
     }
 }
