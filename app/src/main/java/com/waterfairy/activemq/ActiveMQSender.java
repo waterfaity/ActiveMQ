@@ -43,32 +43,39 @@ public class ActiveMQSender {
     public static int TYPE_TOPIC = 2;
 
     public void connect() {
+
         if (TextUtils.isEmpty(url)) {
             if (onActiveMQListener != null) {
                 onActiveMQListener.onActiveMQSenderChange(CONNECT_ERROR, new Exception("server url is null !"));
             }
+            Log.i(TAG, "sender socket connect error : server url is null ! ");
             return;
         }
         new Thread() {
             @Override
             public void run() {
-                if (!isConnect) {
-                    ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory(
-                            user, password, url);
-                    try {
-                        connection = connectionFactory.createConnection();
-                        connection.start();
-                        isConnect = true;
-                        if (onActiveMQListener != null)
-                            onActiveMQListener.onActiveMQSenderChange(CONNECT_OK, null);
-                        Log.i(TAG, "sender connect success");
-                    } catch (JMSException jms) {
-                        isConnect = false;
-                        if (onActiveMQListener != null)
-                            onActiveMQListener.onActiveMQSenderChange(CONNECT_ERROR, jms);
-                        Log.i(TAG, "sender connect error");
+                synchronized (ActiveMQSender.class) {
+                    if (!isConnect) {
+                        Log.i(TAG, "sender start connect ");
+                        ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory(
+                                user, password, url);
+                        try {
+                            connection = connectionFactory.createConnection();
+                            connection.start();
+                            isConnect = true;
+                            if (onActiveMQListener != null)
+                                onActiveMQListener.onActiveMQSenderChange(CONNECT_OK, null);
+                            Log.i(TAG, "sender socket connect success");
+                        } catch (JMSException jms) {
+                            isConnect = false;
+                            if (onActiveMQListener != null)
+                                onActiveMQListener.onActiveMQSenderChange(CONNECT_ERROR, jms);
+                            Log.i(TAG, "sender socket connect error");
+                        }
                     }
+
                 }
+
             }
         }.start();
 
@@ -87,12 +94,14 @@ public class ActiveMQSender {
             if (onActiveMQListener != null) {
                 onActiveMQListener.onActiveMQSenderChange(SEND_ERROR, new Exception("server is not connected !"));
             }
+            Log.i(TAG, "sender error : server is not connected !");
             return;
         }
         if (TextUtils.isEmpty(typeContent)) {
             if (onActiveMQListener != null) {
                 onActiveMQListener.onActiveMQSenderChange(SEND_ERROR, new Exception("has no queue or topic !"));
             }
+            Log.i(TAG, "sender error : has no queue or topic !");
             return;
         }
         new Thread() {
@@ -116,9 +125,9 @@ public class ActiveMQSender {
                     producer.close();
                     if (onActiveMQListener != null)
                         onActiveMQListener.onActiveMQSenderChange(SEND_OK, null);
-                    Log.i(TAG, "send: success -> " + message);
+                    Log.i(TAG, "sender send success -> " + message);
                 } catch (JMSException jms) {
-                    Log.i(TAG, "send: error !");
+                    Log.i(TAG, "sender send error !");
                     jms.printStackTrace();
                     if (onActiveMQListener != null)
                         onActiveMQListener.onActiveMQSenderChange(SEND_ERROR, jms);
@@ -136,14 +145,22 @@ public class ActiveMQSender {
     }
 
     public void disconnect() {
-        try {
-            if (connection != null)
-                connection.close();
-        } catch (JMSException e) {
-            e.printStackTrace();
-        }
-        isConnect = false;
+        new Thread() {
+            @Override
+            public void run() {
+                super.run();
+                try {
+                    if (connection != null)
+                        connection.close();
+                } catch (JMSException e) {
+                    e.printStackTrace();
+                }
+                isConnect = false;
+                Log.i(TAG, "sender socket disconnect(可能延时)");
+            }
+        }.start();
     }
+
 
     public interface OnActiveMQListener {
         void onActiveMQSenderChange(int code, Exception e);
